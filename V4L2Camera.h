@@ -19,7 +19,7 @@
 #ifndef _V4L2CAMERA_H
 #define _V4L2CAMERA_H
 
-#define NB_BUFFER 4
+#define NB_BUFFER 2
 #define DEFAULT_FRAME_RATE 15
 
 #include <binder/MemoryBase.h>
@@ -67,6 +67,7 @@ struct mdIn {
 	int tvp5146;
 	int mt9t111;
 	int mt9v113;
+	int bugcam;
 	int num_entities;
 };
 
@@ -104,6 +105,7 @@ private:
     int nQueued;
     int nDequeued;
 
+    int entity_dev_name(int id, char *name);
     int saveYUYVtoJPEG (unsigned char *inputBuffer, int width, int height, FILE *file, int quality);
 };
 

@@ -41,8 +41,9 @@ extern "C" {
 #define ENTITY_TVP514X_NAME             "tvp514x 3-005c"
 #define ENTITY_MT9T111_NAME             "mt9t111 2-003c"
 #define ENTITY_MT9V113_NAME             "mt9v113 2-003c"
-#define IMG_WIDTH_VGA           640
-#define IMG_HEIGHT_VGA          480
+#define ENTITY_BUGCAM_NAME             "bug_camera_subdev 3-0038"
+#define IMG_WIDTH_VGA           320
+#define IMG_HEIGHT_VGA          240
 #define DEF_PIX_FMT             V4L2_PIX_FMT_UYVY
 
 #include "V4L2Camera.h"
@@ -72,7 +73,7 @@ int V4L2Camera::Open(const char *device)
 {
 	int ret = 0;
 	int ccdc_fd, tvp_fd;
-	struct v4l2_subdev_format fmt;
+	struct v4l2_subdev_pad_format fmt;
 	char subdev[20];
 	LOG_FUNCTION_START
 	do
@@ -83,51 +84,51 @@ int V4L2Camera::Open(const char *device)
 			return -1;
 		}
 		/* Kernel version diff */
+		ret = entity_dev_name(mediaIn->ccdc, subdev);
+		if (ret < 0)
+			return -1;
+		LOGD("CCDC Dev Node: %s %d", subdev, mediaIn->ccdc);
+		ccdc_fd = open(subdev, O_RDWR);
+		if(ccdc_fd == -1) {
+			LOGE("Error opening ccdc device");
+			close(camHandle);
+			reset_links(MEDIA_DEVICE);
+			return -1;
+		}
+		fmt.pad = 0;
+		fmt.which = V4L2_SUBDEV_FORMAT_ACTIVE;
+		fmt.format.code = V4L2_MBUS_FMT_UYVY8_2X8;
+		fmt.format.width = IMG_WIDTH_VGA;
+		fmt.format.height = IMG_HEIGHT_VGA;
+		fmt.format.colorspace = V4L2_COLORSPACE_SMPTE170M;
+		fmt.format.field = V4L2_FIELD_INTERLACED;
+		ret = ioctl(ccdc_fd, VIDIOC_SUBDEV_S_FMT, &fmt);
+		if(ret < 0)
+		{
+			LOGE("Failed to set format on pad %s", strerror(errno));
+		}
+		memset(&fmt, 0, sizeof(fmt));
+		fmt.pad = 1;
+		fmt.which = V4L2_SUBDEV_FORMAT_ACTIVE;
+		fmt.format.code = V4L2_MBUS_FMT_UYVY8_2X8;
+		fmt.format.width = IMG_WIDTH_VGA;
+		fmt.format.height = IMG_HEIGHT_VGA;
+		fmt.format.colorspace = V4L2_COLORSPACE_SMPTE170M;
+		fmt.format.field = V4L2_FIELD_INTERLACED;
+		ret = ioctl(ccdc_fd, VIDIOC_SUBDEV_S_FMT, &fmt);
+		if(ret) {
+			LOGE("Failed to set format on pad");
+		}
+		/* open subdev */
 		/*
-			ccdc_fd = open("/dev/v4l-subdev2", O_RDWR);
-			if(ccdc_fd == -1) {
-				LOGE("Error opening ccdc device");
-				close(camHandle);
-				reset_links(MEDIA_DEVICE);
-				return -1;
-			}
-			fmt.pad = 0;
-			fmt.which = V4L2_SUBDEV_FORMAT_ACTIVE;
-			fmt.format.code = V4L2_MBUS_FMT_UYVY8_2X8;
-			fmt.format.width = IMG_WIDTH_VGA;
-			fmt.format.height = IMG_HEIGHT_VGA;
-			fmt.format.colorspace = V4L2_COLORSPACE_SMPTE170M;
-			fmt.format.field = V4L2_FIELD_INTERLACED;
-			ret = ioctl(ccdc_fd, VIDIOC_SUBDEV_S_FMT, &fmt);
-			if(ret < 0)
-			{
-				LOGE("Failed to set format on pad");
-			}
-			memset(&fmt, 0, sizeof(fmt));
-			fmt.pad = 1;
-			fmt.which = V4L2_SUBDEV_FORMAT_ACTIVE;
-			fmt.format.code = V4L2_MBUS_FMT_UYVY8_2X8;
-			fmt.format.width = IMG_WIDTH_VGA;
-			fmt.format.height = IMG_HEIGHT_VGA;
-			fmt.format.colorspace = V4L2_COLORSPACE_SMPTE170M;
-			fmt.format.field = V4L2_FIELD_INTERLACED;
-			ret = ioctl(ccdc_fd, VIDIOC_SUBDEV_S_FMT, &fmt);
-			if(ret) {
-				LOGE("Failed to set format on pad");
-			}
-			mediaIn->input_source=1;
-			if (mediaIn->input_source != 0)
-				strcpy(subdev, "/dev/v4l-subdev8");
-			else
-				strcpy(subdev, "/dev/v4l-subdev9");
-			tvp_fd = open(subdev, O_RDWR);
-			if(tvp_fd == -1) {
-				LOGE("Failed to open subdev");
-				ret=-1;
-				close(camHandle);
-				reset_links(MEDIA_DEVICE);
-				return ret;
-			}
+		tvp_fd = open(subdev, O_RDWR);
+		if(tvp_fd == -1) {
+			LOGE("Failed to open subdev");
+			ret=-1;
+			close(camHandle);
+			reset_links(MEDIA_DEVICE);
+			return ret;
+		}
 		*/
 		ret = ioctl (camHandle, VIDIOC_QUERYCAP, &videoIn->cap);
 		if (ret < 0) {
@@ -177,7 +178,8 @@ int V4L2Camera::Open_media_device(const char *device)
 		ret = ioctl(mediaIn->media_fd, MEDIA_IOC_ENUM_ENTITIES, &mediaIn->entity[index]);
 		if (ret < 0) {
 			break;
-		} else {
+		}
+		else {
 			if (!strcmp(mediaIn->entity[index].name, ENTITY_VIDEO_CCDC_OUT_NAME))
 				mediaIn->video =  mediaIn->entity[index].id;
 			else if (!strcmp(mediaIn->entity[index].name, ENTITY_TVP514X_NAME))
@@ -194,7 +196,14 @@ int V4L2Camera::Open_media_device(const char *device)
 				mediaIn->mt9v113 =  mediaIn->entity[index].id;
 				mediaIn->input_source=2;
 			}
+			else if (!strcmp(mediaIn->entity[index].name, ENTITY_BUGCAM_NAME))
+			{
+				mediaIn->bugcam =  mediaIn->entity[index].id;
+				mediaIn->input_source=3;
+			}
+
 		}
+		LOGD("Entity Name: %s %d", mediaIn->entity[index].name, mediaIn->entity[index].id);
 		index++;
 	}while(ret==0);
 
@@ -236,9 +245,12 @@ int V4L2Camera::Open_media_device(const char *device)
 		input_v4l = mediaIn->mt9t111;
 	else if (mediaIn->input_source == 2)
 		input_v4l = mediaIn->mt9v113;
+	else if (mediaIn->input_source == 3)
+		input_v4l = mediaIn->bugcam;
 	else
 		input_v4l = mediaIn->tvp5146;
 
+	LOGD("Input source %d", mediaIn->input_source);
 	memset(&link, 0, sizeof(link));
 	link.flags |=  MEDIA_LINK_FLAG_ACTIVE;
 	link.source.entity = input_v4l;
@@ -251,7 +263,7 @@ int V4L2Camera::Open_media_device(const char *device)
 
 	ret = ioctl(mediaIn->media_fd, MEDIA_IOC_SETUP_LINK, &link);
 	if(ret) {
-		LOGE("Failed to enable link bewteen entities");
+		LOGE("Failed to enable link bewteen entities %s", strerror(errno));
 		close(mediaIn->media_fd);
 		return -1;
 	}
@@ -281,16 +293,7 @@ int V4L2Camera::Configure(int width,int height,int pixelformat,int fps)
 	LOG_FUNCTION_START
 
 	struct v4l2_streamparm parm;
-	/*
-	videoIn->width = IMG_WIDTH_VGA;
-	videoIn->height = IMG_HEIGHT_VGA;
-	videoIn->framesizeIn =((IMG_WIDTH_VGA * IMG_HEIGHT_VGA) << 1);
-	videoIn->formatIn = DEF_PIX_FMT;
 
-	videoIn->format.fmt.pix.width =IMG_WIDTH_VGA;
-	videoIn->format.fmt.pix.height =IMG_HEIGHT_VGA;
-	videoIn->format.fmt.pix.pixelformat = DEF_PIX_FMT;
-	/* Kernel version diff */
 	videoIn->width = width;
 	videoIn->height = height;
 	videoIn->framesizeIn =((width * height) << 1);
@@ -299,7 +302,7 @@ int V4L2Camera::Configure(int width,int height,int pixelformat,int fps)
 	videoIn->format.fmt.pix.height =height;
 	videoIn->format.fmt.pix.pixelformat = pixelformat;
 
-    videoIn->format.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    	videoIn->format.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	do
 	{
 		ret = ioctl(camHandle, VIDIOC_S_FMT, &videoIn->format);
@@ -694,6 +697,29 @@ void V4L2Camera::CreateJpegFromBuffer(void *rawBuffer,void *captureBuffer)
     LOG_FUNCTION_EXIT
     return;
 }
+
+int V4L2Camera::entity_dev_name (int id, char *name)
+{
+	int ret = 0;
+	char target[1024];
+	char sysname[32];
+	char *p;
+
+	sprintf(sysname, "/sys/dev/char/%u:%u", mediaIn->entity[id - 1].v4l.major,
+			mediaIn->entity[id - 1].v4l.minor);
+	ret = readlink(sysname, target, sizeof(target));
+	if (ret < 0)
+		return ret;
+	target[ret] = '\0';
+
+	p = strrchr(target, '/');
+	if (p == NULL)
+		return -1;
+
+	return sprintf(name, "/dev/%s", p + 1);
+
+}
+
 int V4L2Camera::saveYUYVtoJPEG (unsigned char *inputBuffer, int width, int height, FILE *file, int quality)
 {
     struct jpeg_compress_struct cinfo;

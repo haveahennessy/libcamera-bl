@@ -75,8 +75,8 @@ CameraHardware::CameraHardware()
 	/* create camera */
 	mCamera = new V4L2Camera();
 
-	mCamera->Open(VIDEO_DEVICE_2);
 	mCamera->Open_media_device(MEDIA_DEVICE);
+	mCamera->Open(VIDEO_DEVICE_2);
 
 	initDefaultParameters();
 
@@ -90,29 +90,29 @@ CameraHardware::CameraHardware()
 
 void CameraHardware::initDefaultParameters()
 {
-    CameraParameters p;
+	CameraParameters p;
 
-    LOG_FUNCTION_START
-    p.setPreviewSize(PREVIEW_WIDTH, PREVIEW_HEIGHT);
-    p.setPreviewFrameRate(DEFAULT_FRAME_RATE);
-    p.setPreviewFormat(CameraParameters::PIXEL_FORMAT_YUV422SP);
+	LOG_FUNCTION_START
+		p.setPreviewSize(PREVIEW_WIDTH, PREVIEW_HEIGHT);
+	p.setPreviewFrameRate(DEFAULT_FRAME_RATE);
+	p.setPreviewFormat(CameraParameters::PIXEL_FORMAT_YUV422SP);
 
-    p.setPictureSize(PREVIEW_WIDTH, PREVIEW_HEIGHT);
-    p.setPictureFormat(CameraParameters::PIXEL_FORMAT_JPEG);
-    p.set(CameraParameters::KEY_JPEG_QUALITY, 100);
-    p.set("picture-size-values", CameraHardware::supportedPictureSizes);
+	p.setPictureSize(PREVIEW_WIDTH, PREVIEW_HEIGHT);
+	p.setPictureFormat(CameraParameters::PIXEL_FORMAT_JPEG);
+	p.set(CameraParameters::KEY_JPEG_QUALITY, 100);
+	p.set("picture-size-values", CameraHardware::supportedPictureSizes);
 
 	p.set(CameraParameters::KEY_SUPPORTED_PICTURE_SIZES, CameraHardware::supportedPictureSizes);
 	p.set(CameraParameters::KEY_SUPPORTED_PICTURE_FORMATS, CameraParameters::PIXEL_FORMAT_JPEG);
 	p.set(CameraParameters::KEY_SUPPORTED_PREVIEW_SIZES, CameraHardware::supportedPreviewSizes);
 	p.set(CameraParameters::KEY_SUPPORTED_PREVIEW_FORMATS, CameraParameters::PIXEL_FORMAT_YUV422SP);
-	p.set(CameraParameters::KEY_PREVIEW_FORMAT, CameraParameters::PIXEL_FORMAT_YUV420SP);
+	p.set(CameraParameters::KEY_PREVIEW_FORMAT, CameraParameters::PIXEL_FORMAT_YUV422SP);
 
-    if (setParameters(p) != NO_ERROR) {
-        LOGE("Failed to set default parameters?!");
-    }
-    LOG_FUNCTION_EXIT
-    return;
+	if (setParameters(p) != NO_ERROR) {
+		LOGE("Failed to set default parameters?!");
+	}
+	LOG_FUNCTION_EXIT
+		return;
 }
 int CameraHardware::get_kernel_version()
 {
@@ -301,16 +301,8 @@ status_t CameraHardware::startPreview()
         delete mCamera;
         mCamera = new V4L2Camera();
     }
-	if(version >= KERNEL_VERSION(2,6,37))
-	{
-		if (mCamera->Open(VIDEO_DEVICE_2) < 0)
+	if (mCamera->Open(VIDEO_DEVICE_2) < 0)
 		return INVALID_OPERATION;
-	}
-	else
-	{
-		if (mCamera->Open(VIDEO_DEVICE_0) < 0)
-		return INVALID_OPERATION;
-	}
     Mutex::Autolock lock(mPreviewLock);
     if (mPreviewThread != 0) {
         return INVALID_OPERATION;
