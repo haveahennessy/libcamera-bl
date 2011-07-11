@@ -260,13 +260,16 @@ int CameraHardware::previewThread()
 {
 	Mutex::Autolock lock(mPreviewLock);
     if (!previewStopped) {
-
-		mCamera->GrabRawFrame(mRawHeap->getBase(),mPreviewWidth,mPreviewHeight);
-
+		mCamera->GrabRawFrame(mRawHeap->getBase(),mRawWidth,mRawHeight);
+		//mCamera->GrabPreviewFrame(mRawHeap->getBase());
 		yuyv422_to_yuv420sp((unsigned char *)mRawHeap->getBase(),
 		                             (unsigned char *)mHeap->getBase(),
-		                              mPreviewWidth, mPreviewHeight);
-
+		                              mRawWidth, mRawHeight);
+		/*
+		yuyv422_to_rgba((unsigned char *)mRawHeap->getBase(),
+		                             (unsigned char *)mHeap->getBase(),
+		                              mPreviewWidth, mPreviewHeight, 0);
+		*/
         mRecordingLock.lock();
         if (mMsgEnabled & CAMERA_MSG_VIDEO_FRAME) {
         	mDataCbTimestamp(systemTime(), CAMERA_MSG_VIDEO_FRAME, mBuffer, mCallbackCookie);
@@ -274,13 +277,14 @@ int CameraHardware::previewThread()
         mRecordingLock.unlock();
 
         if (mMsgEnabled & CAMERA_MSG_PREVIEW_FRAME) {
-            mCamera->convert((unsigned char *) mRawHeap->getBase(),
+            /*mCamera->convert((unsigned char *) mRawHeap->getBase(),
                              (unsigned char *) mPreviewHeap->getBase(),
-                             mPreviewWidth, mPreviewHeight);
-
-
-
-            mDataCb(CAMERA_MSG_PREVIEW_FRAME, mBuffer, mCallbackCookie);
+                             mPreviewWidth, mPreviewHeight);*/
+		/* For Bug - Half size here */
+		yuyv422_to_rgba((unsigned char *) mRawHeap->getBase(),
+                             (unsigned char *) mPreviewHeap->getBase(),
+                             mRawWidth, mRawHeight,0);
+            mDataCb(CAMERA_MSG_PREVIEW_FRAME, mPreviewBuffer, mCallbackCookie);
         }
 
         if (UNLIKELY(mDebugFps)) {
@@ -295,18 +299,19 @@ status_t CameraHardware::startPreview()
 
 	int width, height;
 	int mHeapSize = 0;
-    int ret = 0;
-    LOG_FUNCTION_START
-    if(!mCamera) {
-        delete mCamera;
-        mCamera = new V4L2Camera();
-    }
+	int mRawFrameSize = 0;
+	int ret = 0;
+	LOG_FUNCTION_START
+		if(!mCamera) {
+			delete mCamera;
+			mCamera = new V4L2Camera();
+		}
 	if (mCamera->Open(VIDEO_DEVICE_2) < 0)
 		return INVALID_OPERATION;
-    Mutex::Autolock lock(mPreviewLock);
-    if (mPreviewThread != 0) {
-        return INVALID_OPERATION;
-    }
+	Mutex::Autolock lock(mPreviewLock);
+	if (mPreviewThread != 0) {
+		return INVALID_OPERATION;
+	}
 
 	mParameters.getPreviewSize(&mPreviewWidth, &mPreviewHeight);
 	LOGD("startPreview width:%d,height:%d",mPreviewWidth,mPreviewHeight);
@@ -315,14 +320,24 @@ status_t CameraHardware::startPreview()
 		LOGE("Preview size is not valid,aborting..Device can not open!!!");
 		return INVALID_OPERATION;
 	}
-	ret = mCamera->Configure(mPreviewWidth,mPreviewHeight,PIXEL_FORMAT,30);
+	if ((mPreviewWidth == 320) && (mPreviewHeight == 240))
+	{
+		mRawWidth = 640;
+		mRawHeight = 480;
+	}
+	else
+	{
+		mRawWidth = mPreviewWidth;
+		mRawHeight = mPreviewHeight;
+	}
+	ret = mCamera->Configure(mRawWidth,mRawHeight,PIXEL_FORMAT,30);
 	if(ret < 0)
 	{
 		LOGE("Fail to configure camera device");
 		return INVALID_OPERATION;
 	}
 
-   /* clear previously buffers*/
+	/* clear previously buffers*/
 	if(mPreviewHeap != NULL)
 	{
 		LOGD("mPreviewHeap Cleaning!!!!");
@@ -339,37 +354,37 @@ status_t CameraHardware::startPreview()
 		mHeap.clear();
 	}
 
-    mPreviewFrameSize = mPreviewWidth * mPreviewHeight * 2;
-    mHeapSize = (mPreviewWidth * mPreviewHeight * 3) >> 1;
+	mPreviewFrameSize = mPreviewWidth * mPreviewHeight * 2;
+	mHeapSize = (mRawWidth * mRawHeight * 3) >> 1;
+	mRawFrameSize = mRawWidth * mRawHeight * 2;
+	/* mHeap is yuv420 buffer, as default encoding is yuv420 */
+	mHeap = new MemoryHeapBase(mHeapSize);
+	mBuffer = new MemoryBase(mHeap, 0, mHeapSize);
 
-    /* mHead is yuv420 buffer, as default encoding is yuv420 */
-    mHeap = new MemoryHeapBase(mHeapSize);
-    mBuffer = new MemoryBase(mHeap, 0, mHeapSize);
+	mPreviewHeap = new MemoryHeapBase(mPreviewFrameSize);
+	mPreviewBuffer = new MemoryBase(mPreviewHeap, 0, mPreviewFrameSize);
 
-    mPreviewHeap = new MemoryHeapBase(mPreviewFrameSize);
-    mPreviewBuffer = new MemoryBase(mPreviewHeap, 0, mPreviewFrameSize);
+	mRawHeap = new MemoryHeapBase(mRawFrameSize);
+	mRawBuffer = new MemoryBase(mRawHeap, 0, mRawFrameSize);
 
-    mRawHeap = new MemoryHeapBase(mPreviewFrameSize);
-    mRawBuffer = new MemoryBase(mRawHeap, 0, mPreviewFrameSize);
+	ret = mCamera->BufferMap();
+	if (ret) {
+		LOGE("Camera Init fail: %s", strerror(errno));
+		return UNKNOWN_ERROR;
+	}
 
-    ret = mCamera->BufferMap();
-    if (ret) {
-        LOGE("Camera Init fail: %s", strerror(errno));
-        return UNKNOWN_ERROR;
-    }
+	ret = mCamera->StartStreaming();
+	if (ret) {
+		LOGE("Camera StartStreaming fail: %s", strerror(errno));
+		return UNKNOWN_ERROR;
+	}
 
-    ret = mCamera->StartStreaming();
-    if (ret) {
-        LOGE("Camera StartStreaming fail: %s", strerror(errno));
-        return UNKNOWN_ERROR;
-    }
+	/* start preview thread */
+	previewStopped = false;
+	mPreviewThread = new PreviewThread(this);
 
-    /* start preview thread */
-     previewStopped = false;
-     mPreviewThread = new PreviewThread(this);
-
-     LOG_FUNCTION_EXIT
-    return NO_ERROR;
+	LOG_FUNCTION_EXIT
+		return NO_ERROR;
 }
 
 void CameraHardware::stopPreview()
@@ -493,7 +508,8 @@ int CameraHardware::pictureThread()
 
     if (mMsgEnabled & CAMERA_MSG_COMPRESSED_IMAGE) {
         LOGD("Take Picture COMPRESSED IMAGE");
-        mCamera->CreateJpegFromBuffer(mRawHeap->getBase(),mHeap->getBase());
+        mCamera->CreateJpegFromBuffer(mHeap->getBase(),mHeap->getBase());
+	//mCamera->GrabJpegFrame(mHeap->getBase());
         mDataCb(CAMERA_MSG_COMPRESSED_IMAGE, mBuffer, mCallbackCookie);
    }
 	LOG_FUNCTION_EXIT
