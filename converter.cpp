@@ -259,3 +259,60 @@ yuyv422_to_yuv420sp(unsigned char *bufsrc, unsigned char *bufdest, int width, in
 
     }
 }
+
+static void __yuv2rgb(int y, int cb, int cr, int *r, int *g, int *b) {
+  *r = (256*y          + 614*cr)/256;
+  *g = (256*y -  77*cb - 179*cr)/256;
+  *b = (256*y + 453*cb         )/256;
+  if(*r > 255) *r = 255;
+  if(*g > 255) *g = 255;
+  if(*b > 255) *b = 255;
+  if(*r < 0) *r = 0;
+  if(*g < 0) *g = 0;
+  if(*b < 0) *b = 0;
+}
+
+void yuyv422_to_rgba(unsigned char *bufsrc, unsigned char *bufdest, int width, int height, unsigned char alpha)
+{
+	int row, col;
+	int y0, y1, cr, cb;
+	int r, g, b;
+	int w;
+
+	w = width * 2;
+	for(row=0; row < height; row+=2) {
+		for(col=0; col < width; col+=2) {
+			y0 = (((int) *(bufsrc+0)) + ((int) *(bufsrc+2)) + ((int) *(bufsrc+w)) + ((int) *(bufsrc+w+2))) / 4;
+
+			cb = (((int) *(bufsrc+1)) + ((int) *(bufsrc+w+1)))/2 - 128;
+			cr = (((int) *(bufsrc+3)) + ((int) *(bufsrc+w+3)))/2 - 128;
+			__yuv2rgb(y0, cb, cr, &r, &g, &b);
+			*bufdest++ = ((unsigned int) alpha) << 24 |  (r << 16) | (g << 8) | b;
+			bufsrc += 4;
+		}
+		bufsrc += w;
+		//LOGD("row=%d ibuf=0x%x out=0x%x", row, bufsrc, bufdest);
+	}
+
+/*
+	for(row=0; row < height; row++) {
+		for(col=0; col < width; col+=2) {
+			y0 = ((int) *bufsrc++);
+			cb = ((int) *bufsrc++) - 128;
+			y1 = ((int) *bufsrc++);
+			cr = ((int) *bufsrc++) - 128;
+			__yuv2rgb(y0, cb, cr, &r, &g, &b);
+			*bufdest++ = r;
+			*bufdest++ = g;
+			*bufdest++ = b;
+			__yuv2rgb(y1, cb, cr, &r, &g, &b);
+			*bufdest++ = r;
+			*bufdest++ = g;
+			*bufdest++ = b;
+		}
+	}
+*/
+
+}
+
+

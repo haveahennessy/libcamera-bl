@@ -21,5 +21,6 @@
 
 void yuyv422_to_yuv420(unsigned char *bufsrc, unsigned char *bufdest, int width, int height);
 void yuyv422_to_yuv420sp(unsigned char *bufsrc, unsigned char *bufdest, int width, int height);
+void yuyv422_to_rgba(unsigned char *bufsrc, unsigned char *bufdest, int width, int height, unsigned char alpha);
 
 #endif
