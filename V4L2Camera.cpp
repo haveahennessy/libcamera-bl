@@ -36,14 +36,16 @@ extern "C" {
     #include <jpeglib.h>
 }
 #define MEDIA_DEVICE "/dev/media0"
+#define ENTITY_VIDEO_RSZ_NAME		"OMAP3 ISP resizer"
+#define ENTITY_VIDEO_RSZ_OUT_NAME	"OMAP3 ISP resizer output"
 #define ENTITY_VIDEO_CCDC_OUT_NAME      "OMAP3 ISP CCDC output"
 #define ENTITY_CCDC_NAME                "OMAP3 ISP CCDC"
 #define ENTITY_TVP514X_NAME             "tvp514x 3-005c"
 #define ENTITY_MT9T111_NAME             "mt9t111 2-003c"
 #define ENTITY_MT9V113_NAME             "mt9v113 2-003c"
 #define ENTITY_BUGCAM_NAME             "bug_camera_subdev 3-0038"
-#define IMG_WIDTH_VGA           320
-#define IMG_HEIGHT_VGA          240
+#define IMG_WIDTH_VGA           1024
+#define IMG_HEIGHT_VGA          768
 #define DEF_PIX_FMT             V4L2_PIX_FMT_UYVY
 
 #include "V4L2Camera.h"
@@ -72,13 +74,17 @@ V4L2Camera::~V4L2Camera()
 int V4L2Camera::Open(const char *device)
 {
 	int ret = 0;
-	int ccdc_fd, tvp_fd;
+	int ccdc_fd, rsz_fd, tvp_fd;
 	struct v4l2_subdev_pad_format fmt;
 	char subdev[20];
 	LOG_FUNCTION_START
 	do
 	{
-		if ((camHandle = open(device, O_RDWR)) == -1) {
+		ret = entity_dev_name(mediaIn->video, subdev);
+		if (ret < 0)
+			return -1;
+		LOGD("Output Dev Node: %s %d", subdev, mediaIn->video);
+		if ((camHandle = open(subdev, O_RDWR)) == -1) {
 			LOGE("ERROR opening V4L interface: %s", strerror(errno));
 			reset_links(MEDIA_DEVICE);
 			return -1;
@@ -97,10 +103,10 @@ int V4L2Camera::Open(const char *device)
 		}
 		fmt.pad = 0;
 		fmt.which = V4L2_SUBDEV_FORMAT_ACTIVE;
-		fmt.format.code = V4L2_MBUS_FMT_UYVY8_2X8;
+		fmt.format.code = V4L2_MBUS_FMT_YUYV16_1X16;
 		fmt.format.width = IMG_WIDTH_VGA;
 		fmt.format.height = IMG_HEIGHT_VGA;
-		fmt.format.colorspace = V4L2_COLORSPACE_SMPTE170M;
+		//fmt.format.colorspace = V4L2_COLORSPACE_SMPTE170M;
 		fmt.format.field = V4L2_FIELD_INTERLACED;
 		ret = ioctl(ccdc_fd, VIDIOC_SUBDEV_S_FMT, &fmt);
 		if(ret < 0)
@@ -110,15 +116,54 @@ int V4L2Camera::Open(const char *device)
 		memset(&fmt, 0, sizeof(fmt));
 		fmt.pad = 1;
 		fmt.which = V4L2_SUBDEV_FORMAT_ACTIVE;
-		fmt.format.code = V4L2_MBUS_FMT_UYVY8_2X8;
+		fmt.format.code = V4L2_MBUS_FMT_YUYV16_1X16;
 		fmt.format.width = IMG_WIDTH_VGA;
 		fmt.format.height = IMG_HEIGHT_VGA;
-		fmt.format.colorspace = V4L2_COLORSPACE_SMPTE170M;
+		//fmt.format.colorspace = V4L2_COLORSPACE_SMPTE170M;
 		fmt.format.field = V4L2_FIELD_INTERLACED;
 		ret = ioctl(ccdc_fd, VIDIOC_SUBDEV_S_FMT, &fmt);
 		if(ret) {
 			LOGE("Failed to set format on pad");
 		}
+		close(ccdc_fd);
+
+		ret = entity_dev_name(mediaIn->resizer, subdev);
+		if (ret < 0)
+			return -1;
+		LOGD("Resizer Dev Node: %s %d", subdev, mediaIn->ccdc);
+		rsz_fd = open(subdev, O_RDWR);
+		if(ccdc_fd == -1) {
+			LOGE("Error opening ccdc device");
+			close(camHandle);
+			reset_links(MEDIA_DEVICE);
+			return -1;
+		}
+		fmt.pad = 0;
+		fmt.which = V4L2_SUBDEV_FORMAT_ACTIVE;
+		fmt.format.code = V4L2_MBUS_FMT_YUYV16_1X16;
+		fmt.format.width = IMG_WIDTH_VGA;
+		fmt.format.height = IMG_HEIGHT_VGA;
+		//fmt.format.colorspace = V4L2_COLORSPACE_SMPTE170M;
+		fmt.format.field = V4L2_FIELD_INTERLACED;
+		ret = ioctl(rsz_fd, VIDIOC_SUBDEV_S_FMT, &fmt);
+		if(ret < 0)
+		{
+			LOGE("Failed to set format on pad %s", strerror(errno));
+		}
+		memset(&fmt, 0, sizeof(fmt));
+		fmt.pad = 1;
+		fmt.which = V4L2_SUBDEV_FORMAT_ACTIVE;
+		fmt.format.code = V4L2_MBUS_FMT_YUYV16_1X16;
+		fmt.format.width = 640;
+		fmt.format.height = 480;
+		//fmt.format.colorspace = V4L2_COLORSPACE_SMPTE170M;
+		fmt.format.field = V4L2_FIELD_INTERLACED;
+		ret = ioctl(rsz_fd, VIDIOC_SUBDEV_S_FMT, &fmt);
+		if(ret) {
+			LOGE("Failed to set format on pad");
+		}
+		close(rsz_fd);
+
 		/* open subdev */
 		/*
 		tvp_fd = open(subdev, O_RDWR);
@@ -180,8 +225,10 @@ int V4L2Camera::Open_media_device(const char *device)
 			break;
 		}
 		else {
-			if (!strcmp(mediaIn->entity[index].name, ENTITY_VIDEO_CCDC_OUT_NAME))
+			if (!strcmp(mediaIn->entity[index].name, ENTITY_VIDEO_RSZ_OUT_NAME))
 				mediaIn->video =  mediaIn->entity[index].id;
+			else if (!strcmp(mediaIn->entity[index].name, ENTITY_VIDEO_RSZ_NAME))
+				mediaIn->resizer =  mediaIn->entity[index].id;
 			else if (!strcmp(mediaIn->entity[index].name, ENTITY_TVP514X_NAME))
 				mediaIn->tvp5146 =  mediaIn->entity[index].id;
 			else if (!strcmp(mediaIn->entity[index].name, ENTITY_MT9T111_NAME))
@@ -272,13 +319,27 @@ int V4L2Camera::Open_media_device(const char *device)
 	link.source.entity = mediaIn->ccdc;
 	link.source.index = 1;
 	link.source.type = MEDIA_PAD_TYPE_OUTPUT;
+	link.sink.entity = mediaIn->resizer;
+	link.sink.index = 0;
+	link.sink.type = MEDIA_PAD_TYPE_INPUT;
+	ret = ioctl(mediaIn->media_fd, MEDIA_IOC_SETUP_LINK, &link);
+	if(ret){
+		LOGE("Failed to enable ccdc-resizer link %s", strerror(errno));
+		close(mediaIn->media_fd);
+		return -1;
+	}
+
+	memset(&link, 0, sizeof(link));
+	link.flags |=  MEDIA_LINK_FLAG_ACTIVE;
+	link.source.entity = mediaIn->resizer;
+	link.source.index = 1;
+	link.source.type = MEDIA_PAD_TYPE_OUTPUT;
 	link.sink.entity = mediaIn->video;
 	link.sink.index = 0;
 	link.sink.type = MEDIA_PAD_TYPE_INPUT;
 	ret = ioctl(mediaIn->media_fd, MEDIA_IOC_SETUP_LINK, &link);
 	if(ret){
-		LOGE("Failed to enable link");
-
+		LOGE("Failed to enable resizer-resizer output link %s", strerror(errno));
 		close(mediaIn->media_fd);
 		return -1;
 	}
@@ -610,7 +671,7 @@ V4L2Camera::savePicture(unsigned char *inputBuffer, const char * filename)
     output = fopen(filename, "wb");
 
     if (output == NULL) {
-        LOGE("GrabJpegFrame: Ouput file == NULL");
+        LOGE("GrabJpegFrame: Ouput file == NULL %s", strerror(errno));
         return 0;
     }
 

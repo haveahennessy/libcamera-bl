@@ -64,6 +64,7 @@ struct mdIn {
 	struct media_user_entity entity[20];
 	int video;
 	int ccdc;
+	int resizer;
 	int tvp5146;
 	int mt9t111;
 	int mt9v113;
