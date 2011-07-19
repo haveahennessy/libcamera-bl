@@ -94,7 +94,7 @@ public:
     void GrabPreviewFrame (void *previewBuffer);
     void GrabRawFrame(void *previewBuffer,unsigned int width, unsigned int height);
     void GrabJpegFrame (void *captureBuffer);
-    void CreateJpegFromBuffer(void *rawBuffer,void *captureBuffer);
+    int CreateJpegFromBuffer(void *rawBuffer,void **captureBuffer);
     int savePicture(unsigned char *inputBuffer, const char * filename);
     void convert(unsigned char *buf, unsigned char *rgb, int width, int height);
 
@@ -107,7 +107,8 @@ private:
     int nDequeued;
 
     int entity_dev_name(int id, char *name);
-    int saveYUYVtoJPEG (unsigned char *inputBuffer, int width, int height, FILE *file, int quality);
+    int saveYUYVtoJPEG (unsigned char *inputBuffer, int width, int height, 
+    			unsigned char **outputBuffer, int quality);
 };
 
 }; // namespace android

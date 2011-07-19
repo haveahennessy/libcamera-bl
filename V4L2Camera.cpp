@@ -49,6 +49,7 @@ extern "C" {
 #define DEF_PIX_FMT             V4L2_PIX_FMT_UYVY
 
 #include "V4L2Camera.h"
+#include "jpeg-dest.h"
 
 namespace android {
 
@@ -675,7 +676,7 @@ V4L2Camera::savePicture(unsigned char *inputBuffer, const char * filename)
         return 0;
     }
 
-    fileSize = saveYUYVtoJPEG(inputBuffer, videoIn->width, videoIn->height, output, 100);
+    //fileSize = saveYUYVtoJPEG(inputBuffer, videoIn->width, videoIn->height, output, 100);
 
     fclose(output);
     return fileSize;
@@ -730,7 +731,7 @@ void V4L2Camera::GrabJpegFrame (void *captureBuffer)
     LOG_FUNCTION_EXIT
     return;
 }
-void V4L2Camera::CreateJpegFromBuffer(void *rawBuffer,void *captureBuffer)
+int V4L2Camera::CreateJpegFromBuffer(void *rawBuffer,void **captureBuffer)
 {
     FILE *output;
     FILE *input;
@@ -741,22 +742,14 @@ void V4L2Camera::CreateJpegFromBuffer(void *rawBuffer,void *captureBuffer)
 
     do{
      	LOGE("savePicture");
-		fileSize = savePicture((unsigned char *)rawBuffer, "/sdcard/tmp.jpg");
+		fileSize = saveYUYVtoJPEG((unsigned char *)rawBuffer, videoIn->width, videoIn->height, (unsigned char **)captureBuffer, 100);
 
 		LOGE("fopen temp file");
-		input = fopen("/sdcard/tmp.jpg", "rb");
 
-		if (input == NULL)
-			LOGE("GrabJpegFrame: Input file == NULL");
-		else {
-			fread((uint8_t *)captureBuffer, 1, fileSize, input);
-			fclose(input);
-		}
-		break;
     }while(0);
 
     LOG_FUNCTION_EXIT
-    return;
+    return fileSize;
 }
 
 int V4L2Camera::entity_dev_name (int id, char *name)
@@ -781,26 +774,29 @@ int V4L2Camera::entity_dev_name (int id, char *name)
 
 }
 
-int V4L2Camera::saveYUYVtoJPEG (unsigned char *inputBuffer, int width, int height, FILE *file, int quality)
+/*
+int V4L2Camera::saveYUYVtoJPEG (unsigned char *inputBuffer, int width, int height, 
+	unsigned char **outputBuffer, int quality)
 {
     struct jpeg_compress_struct cinfo;
     struct jpeg_error_mgr jerr;
     JSAMPROW row_pointer[1];
     unsigned char *line_buffer, *yuyv;
     int z;
-    int fileSize;
+    struct jpeg_buffer_dest dst;
 
     line_buffer = (unsigned char *) calloc (width * 3, 1);
     yuyv = inputBuffer;
 
     cinfo.err = jpeg_std_error (&jerr);
     jpeg_create_compress (&cinfo);
-    jpeg_stdio_dest (&cinfo, file);
+    jpeg_buffer_dest (&cinfo, &dst);
 
     cinfo.image_width = width;
     cinfo.image_height = height;
     cinfo.input_components = 3;
     cinfo.in_color_space = JCS_RGB;
+    //cinfo.in_color_space = JCS_YCbCr;
 
     jpeg_set_defaults (&cinfo);
     jpeg_set_quality (&cinfo, quality, TRUE);
@@ -825,6 +821,7 @@ int V4L2Camera::saveYUYVtoJPEG (unsigned char *inputBuffer, int width, int heigh
 		    u = yuyv[0] - 128;
 		    v = yuyv[2] - 128;
 		    /* Kernel version diff */
+		    /*
 
 		    if (!z)
 			    y = yuyv[0] << 8;
@@ -853,13 +850,94 @@ int V4L2Camera::saveYUYVtoJPEG (unsigned char *inputBuffer, int width, int heigh
     }
 
     jpeg_finish_compress (&cinfo);
-    fileSize = ftell(file);
+	LOGD("JPEG Buffer Size: %d", dst.used);
+	LOGD("First bytes %x %x %x %x", dst.buf[0], dst.buf[1], dst.buf[2], dst.buf[3]);
+	//memcpy(outputBuffer, (unsigned char*)dst.buf, dst.sz);
+	*outputBuffer = dst.buf;
     jpeg_destroy_compress (&cinfo);
-
     free (line_buffer);
 
-    return fileSize;
+    return dst.used;
 }
+*/
+
+int V4L2Camera::saveYUYVtoJPEG (unsigned char *inputBuffer, int width, int height, 
+	unsigned char **outputBuffer, int quality)
+{
+	int bytesPerPixel = 2;
+
+	struct jpeg_compress_struct comp;
+	struct jpeg_error_mgr error;
+	struct jpeg_buffer_dest dst;
+
+	comp.err = jpeg_std_error(&error);
+	jpeg_create_compress(&comp);
+	/*jpeg_stdio_dest(&comp, out);*/
+	jpeg_buffer_dest (&comp, &dst);
+	comp.image_width = width;
+	comp.image_height = height;
+	comp.input_components = 3;
+	comp.in_color_space = JCS_YCbCr;
+	jpeg_set_defaults(&comp);
+	jpeg_set_quality(&comp, 90, TRUE);
+	jpeg_start_compress(&comp, TRUE);
+
+	unsigned char * yuvBuf = (unsigned char *) malloc(width * 3);
+	if(yuvBuf < 0) {
+		return 0;
+	}
+
+	for (int i = 0; i < height; ++i) {
+		/*
+		   From http://v4l2spec.bytesex.org/spec-single/v4l2.html#V4L2-PIX-FMT-YUYV
+
+		   Example 2-1. V4L2_PIX_FMT_YUYV 4 ? 4 pixel image
+
+		   Byte Order. Each cell is one byte.
+
+		   start + 0:	Y'00	Cb00	Y'01	Cr00	Y'02	Cb01	Y'03	Cr01
+		   start + 8:	Y'10	Cb10	Y'11	Cr10	Y'12	Cb11	Y'13	Cr11
+		   start + 16:	Y'20	Cb20	Y'21	Cr20	Y'22	Cb21	Y'23	Cr21
+		   start + 24:	Y'30	Cb30	Y'31	Cr30	Y'32	Cb31	Y'33	Cr31
+
+		   Example 2-1. V4L2_PIX_FMT_UYVY 4 ? 4 pixel image
+
+		   Byte Order. Each cell is one byte.
+
+		   start + 0:	Cb00	Y'00	Cr00	Y'01	Cb01	Y'02	Cr01	Y'03
+		   start + 8:	Cb10	Y'10	Cr10	Y'11	Cb11	Y'12	Cr11	Y'13
+		   start + 16:	Cb20	Y'20	Cr20	Y'21	Cb21	Y'22	Cr21	Y'23
+		   start + 24:	Cb30	Y'30	Cr30	Y'31	Cb31	Y'32	Cr31	Y'33
+		 */
+		//convert a scanline from YUYV to YCbCr
+		unsigned char * yuvPtr = yuvBuf;
+		const unsigned char * yuyvPtr = inputBuffer;
+
+		while(yuvPtr < (unsigned char *) (yuvBuf + (width * 3))) {
+			yuvPtr[0] = yuyvPtr[0];
+			yuvPtr[1] = yuyvPtr[1];
+			yuvPtr[2] = yuyvPtr[3];
+			yuvPtr[3] = yuyvPtr[2];
+			yuvPtr[4] = yuyvPtr[1];
+			yuvPtr[5] = yuyvPtr[3];
+
+			yuyvPtr += 4;
+			yuvPtr += 6;
+		}
+
+		jpeg_write_scanlines(&comp, &yuvBuf, 1);
+		inputBuffer += (width * 2);
+	}
+
+	free(yuvBuf);
+	jpeg_finish_compress(&comp);
+	jpeg_destroy_compress(&comp);
+
+	*outputBuffer = dst.buf;
+	size_t dataWritten = dst.used;
+	return dataWritten;
+}
+
 
 static inline void yuv_to_rgb16(unsigned char y,
                                 unsigned char u,
