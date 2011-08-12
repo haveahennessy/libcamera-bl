@@ -56,20 +56,16 @@ namespace android {
 V4L2Camera::V4L2Camera ()
     : nQueued(0), nDequeued(0)
 {
-    videoIn = (struct vdIn *) calloc (1, sizeof (struct vdIn));
-    mediaIn = (struct mdIn *) calloc (1, sizeof (struct mdIn));
-    mediaIn->input_source=1;
-    camHandle = -1;
-#ifdef _OMAP_RESIZER_
-	videoIn->resizeHandle = -1;
-#endif //_OMAP_RESIZER_
+	videoIn = (struct vdIn *) calloc (1, sizeof (struct vdIn));
+	mediaIn = (struct mdIn *) calloc (1, sizeof (struct mdIn));
+	mediaIn->input_source=1;
+	camHandle = -1;
 }
 
 V4L2Camera::~V4L2Camera()
 {
-    free(videoIn);
-    free(mediaIn);
-
+	free(videoIn);
+	free(mediaIn);
 }
 
 int V4L2Camera::Open(const char *device)
@@ -165,17 +161,6 @@ int V4L2Camera::Open(const char *device)
 		}
 		close(rsz_fd);
 
-		/* open subdev */
-		/*
-		tvp_fd = open(subdev, O_RDWR);
-		if(tvp_fd == -1) {
-			LOGE("Failed to open subdev");
-			ret=-1;
-			close(camHandle);
-			reset_links(MEDIA_DEVICE);
-			return ret;
-		}
-		*/
 		ret = ioctl (camHandle, VIDIOC_QUERYCAP, &videoIn->cap);
 		if (ret < 0) {
 			LOGE("Error opening device: unable to query device.");
@@ -230,24 +215,12 @@ int V4L2Camera::Open_media_device(const char *device)
 				mediaIn->video =  mediaIn->entity[index].id;
 			else if (!strcmp(mediaIn->entity[index].name, ENTITY_VIDEO_RSZ_NAME))
 				mediaIn->resizer =  mediaIn->entity[index].id;
-			else if (!strcmp(mediaIn->entity[index].name, ENTITY_TVP514X_NAME))
-				mediaIn->tvp5146 =  mediaIn->entity[index].id;
-			else if (!strcmp(mediaIn->entity[index].name, ENTITY_MT9T111_NAME))
-			{
-				mediaIn->mt9t111 =  mediaIn->entity[index].id;
-				mediaIn->input_source=1;
-			}
 			else if (!strcmp(mediaIn->entity[index].name, ENTITY_CCDC_NAME))
 				mediaIn->ccdc =  mediaIn->entity[index].id;
-			else if (!strcmp(mediaIn->entity[index].name, ENTITY_MT9V113_NAME))
-			{
-				mediaIn->mt9v113 =  mediaIn->entity[index].id;
-				mediaIn->input_source=2;
-			}
 			else if (!strcmp(mediaIn->entity[index].name, ENTITY_BUGCAM_NAME))
 			{
 				mediaIn->bugcam =  mediaIn->entity[index].id;
-				mediaIn->input_source=3;
+				mediaIn->input_source=1;
 			}
 
 		}
@@ -289,14 +262,8 @@ int V4L2Camera::Open_media_device(const char *device)
 			}
 		}
 	}
-	if (mediaIn->input_source == 1)
-		input_v4l = mediaIn->mt9t111;
-	else if (mediaIn->input_source == 2)
-		input_v4l = mediaIn->mt9v113;
-	else if (mediaIn->input_source == 3)
-		input_v4l = mediaIn->bugcam;
-	else
-		input_v4l = mediaIn->tvp5146;
+
+	input_v4l = mediaIn->bugcam;
 
 	LOGD("Input source %d", mediaIn->input_source);
 	memset(&link, 0, sizeof(link));
@@ -439,317 +406,224 @@ void V4L2Camera::reset_links(const char *device)
 	int ret, index;
 	unsigned int i;
 	/*reset the media links*/
-    mediaIn->media_fd= open(device, O_RDWR);
-    for(index = 0; index < mediaIn->num_entities; index++)
-    {
-	links.entity = mediaIn->entity[index].id;
-	links.pads = (struct media_user_pad *)malloc(sizeof( struct media_user_pad) * mediaIn->entity[index].pads);
-	links.links = (struct media_user_link *)malloc(sizeof(struct media_user_link) * mediaIn->entity[index].links);
-	ret = ioctl(mediaIn->media_fd, MEDIA_IOC_ENUM_LINKS, &links);
-	if (ret < 0) {
-		LOGD("Error while enumeration links/pads - %d\n", ret);
-		break;
-	}
-	else {
-	   LOGD("Inside else");
-		for(i = 0; i < mediaIn->entity[index].links; i++) {
-			link.source.entity = links.links->source.entity;
-			link.source.index = links.links->source.index;
-			link.source.type = MEDIA_PAD_TYPE_OUTPUT;
-			link.sink.entity = links.links->sink.entity;
-			link.sink.index = links.links->sink.index;
-			link.sink.type = MEDIA_PAD_TYPE_INPUT;
-			link.flags = (link.flags & ~MEDIA_LINK_FLAG_ACTIVE) | (link.flags & MEDIA_LINK_FLAG_IMMUTABLE);
-			ret = ioctl(mediaIn->media_fd, MEDIA_IOC_SETUP_LINK, &link);
-			if(ret)
-				break;
-			links.links++;
+	mediaIn->media_fd= open(device, O_RDWR);
+	for(index = 0; index < mediaIn->num_entities; index++)
+	{
+		links.entity = mediaIn->entity[index].id;
+		links.pads = (struct media_user_pad *)malloc(sizeof( struct media_user_pad) * mediaIn->entity[index].pads);
+		links.links = (struct media_user_link *)malloc(sizeof(struct media_user_link) * mediaIn->entity[index].links);
+		ret = ioctl(mediaIn->media_fd, MEDIA_IOC_ENUM_LINKS, &links);
+		if (ret < 0) {
+			LOGD("Error while enumeration links/pads - %d\n", ret);
+			break;
+		}
+		else {
+			LOGD("Inside else");
+			for(i = 0; i < mediaIn->entity[index].links; i++) {
+				link.source.entity = links.links->source.entity;
+				link.source.index = links.links->source.index;
+				link.source.type = MEDIA_PAD_TYPE_OUTPUT;
+				link.sink.entity = links.links->sink.entity;
+				link.sink.index = links.links->sink.index;
+				link.sink.type = MEDIA_PAD_TYPE_INPUT;
+				link.flags = (link.flags & ~MEDIA_LINK_FLAG_ACTIVE) | (link.flags & MEDIA_LINK_FLAG_IMMUTABLE);
+				ret = ioctl(mediaIn->media_fd, MEDIA_IOC_SETUP_LINK, &link);
+				if(ret)
+					break;
+				links.links++;
+			}
 		}
 	}
-     }
-     close (mediaIn->media_fd);
+	close (mediaIn->media_fd);
 }
 
 void V4L2Camera::Close ()
 {
 	LOG_FUNCTION_START
-    close(camHandle);
-    camHandle = -1;
+	close(camHandle);
+	camHandle = -1;
 
-    LOG_FUNCTION_EXIT
-    return;
+	LOG_FUNCTION_EXIT
+	return;
 }
 
 int V4L2Camera::init_parm()
 {
-    int ret;
-    int framerate;
-    struct v4l2_streamparm parm;
+	int ret;
+	int framerate;
+	struct v4l2_streamparm parm;
 
-    LOG_FUNCTION_START
-    framerate = DEFAULT_FRAME_RATE;
+	LOG_FUNCTION_START
+		framerate = DEFAULT_FRAME_RATE;
 
-    parm.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	parm.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 
-    ret = ioctl(camHandle, VIDIOC_G_PARM, &parm);
-    if(ret != 0) {
-        LOGE("VIDIOC_G_PARM fail....");
-        return ret;
-    }
+	ret = ioctl(camHandle, VIDIOC_G_PARM, &parm);
+	if(ret != 0) {
+		LOGE("VIDIOC_G_PARM fail....");
+		return ret;
+	}
 
-    parm.parm.capture.timeperframe.numerator = 1;
-    parm.parm.capture.timeperframe.denominator = framerate;
-    ret = ioctl(camHandle, VIDIOC_S_PARM, &parm);
-    if(ret != 0) {
-        LOGE("VIDIOC_S_PARM  Fail....");
-        return -1;
-    }
-    LOG_FUNCTION_EXIT
-    return 0;
+	parm.parm.capture.timeperframe.numerator = 1;
+	parm.parm.capture.timeperframe.denominator = framerate;
+	ret = ioctl(camHandle, VIDIOC_S_PARM, &parm);
+	if(ret != 0) {
+		LOGE("VIDIOC_S_PARM  Fail....");
+		return -1;
+	}
+	LOG_FUNCTION_EXIT
+		return 0;
 }
 
 void V4L2Camera::Uninit()
 {
-    int ret;
+	int ret;
 
-    LOG_FUNCTION_START
+	LOG_FUNCTION_START
 
-    videoIn->buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-    videoIn->buf.memory = V4L2_MEMORY_MMAP;
+		videoIn->buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	videoIn->buf.memory = V4L2_MEMORY_MMAP;
 
-    /* Dequeue everything */
-    int DQcount = nQueued - nDequeued;
+	/* Dequeue everything */
+	int DQcount = nQueued - nDequeued;
 
-    for (int i = 0; i < DQcount-1; i++) {
-        ret = ioctl(camHandle, VIDIOC_DQBUF, &videoIn->buf);
-        if (ret < 0)
-            LOGE("Uninit: VIDIOC_DQBUF Failed");
-    }
-    nQueued = 0;
-    nDequeued = 0;
+	for (int i = 0; i < DQcount-1; i++) {
+		ret = ioctl(camHandle, VIDIOC_DQBUF, &videoIn->buf);
+		if (ret < 0)
+			LOGE("Uninit: VIDIOC_DQBUF Failed");
+	}
+	nQueued = 0;
+	nDequeued = 0;
 
-    /* Unmap buffers */
-    for (int i = 0; i < NB_BUFFER; i++)
-        if (munmap(videoIn->mem[i], videoIn->buf.length) < 0)
-            LOGE("Uninit: Unmap failed");
+	/* Unmap buffers */
+	for (int i = 0; i < NB_BUFFER; i++)
+		if (munmap(videoIn->mem[i], videoIn->buf.length) < 0)
+			LOGE("Uninit: Unmap failed");
 
-    LOG_FUNCTION_EXIT
-    return;
+	LOG_FUNCTION_EXIT
+		return;
 }
 
 int V4L2Camera::StartStreaming ()
 {
-    enum v4l2_buf_type type;
-    int ret;
+	enum v4l2_buf_type type;
+	int ret;
 
-    LOG_FUNCTION_START
-    if (!videoIn->isStreaming) {
-        type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	LOG_FUNCTION_START
+		if (!videoIn->isStreaming) {
+			type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 
-        ret = ioctl (camHandle, VIDIOC_STREAMON, &type);
-        if (ret < 0) {
-            LOGE("StartStreaming: Unable to start capture: %s", strerror(errno));
-            return ret;
-        }
+			ret = ioctl (camHandle, VIDIOC_STREAMON, &type);
+			if (ret < 0) {
+				LOGE("StartStreaming: Unable to start capture: %s", strerror(errno));
+				return ret;
+			}
 
-        videoIn->isStreaming = true;
-    }
+			videoIn->isStreaming = true;
+		}
 
-    LOG_FUNCTION_EXIT
-    return 0;
+	LOG_FUNCTION_EXIT
+		return 0;
 }
 
 int V4L2Camera::StopStreaming ()
 {
-    enum v4l2_buf_type type;
-    int ret;
+	enum v4l2_buf_type type;
+	int ret;
 
-    LOG_FUNCTION_START
-    if (videoIn->isStreaming) {
-        type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	LOG_FUNCTION_START
+		if (videoIn->isStreaming) {
+			type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 
-        ret = ioctl (camHandle, VIDIOC_STREAMOFF, &type);
-        if (ret < 0) {
-            LOGE("StopStreaming: Unable to stop capture: %s", strerror(errno));
-            return ret;
-        }
+			ret = ioctl (camHandle, VIDIOC_STREAMOFF, &type);
+			if (ret < 0) {
+				LOGE("StopStreaming: Unable to stop capture: %s", strerror(errno));
+				return ret;
+			}
 
-        videoIn->isStreaming = false;
-    }
+			videoIn->isStreaming = false;
+		}
 
-    LOG_FUNCTION_EXIT
-    return 0;
+	LOG_FUNCTION_EXIT
+		return 0;
 }
 
 void V4L2Camera::GrabPreviewFrame (void *previewBuffer)
 {
-    unsigned char *tmpBuffer;
-    int ret;
-
-    tmpBuffer = (unsigned char *) calloc (1, videoIn->width * videoIn->height * 2);
-
-    videoIn->buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-    videoIn->buf.memory = V4L2_MEMORY_MMAP;
-
-    /* DQ */
-    ret = ioctl(camHandle, VIDIOC_DQBUF, &videoIn->buf);
-    if (ret < 0) {
-        LOGE("GrabPreviewFrame: VIDIOC_DQBUF Failed");
-        return;
-    }
-    nDequeued++;
-
-    memcpy(tmpBuffer, videoIn->mem[videoIn->buf.index], (size_t) videoIn->buf.bytesused);
-
-    convert((unsigned char *) tmpBuffer, (unsigned char *) previewBuffer,
-            videoIn->width, videoIn->height);
-
-    ret = ioctl(camHandle, VIDIOC_QBUF, &videoIn->buf);
-    if (ret < 0) {
-        LOGE("GrabPreviewFrame: VIDIOC_QBUF Failed");
-        return;
-    }
-
-    nQueued++;
-
-    free(tmpBuffer);
 }
 
 void V4L2Camera::GrabRawFrame(void *previewBuffer,unsigned int width, unsigned int height)
 {
-    int ret = 0;
-    int DQcount = 0;
+	int ret = 0;
+	int DQcount = 0;
 
-    videoIn->buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-    videoIn->buf.memory = V4L2_MEMORY_MMAP;
+	videoIn->buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	videoIn->buf.memory = V4L2_MEMORY_MMAP;
 
 
-    DQcount = nQueued - nDequeued;
-    if(DQcount == 0)
-    {
-    	LOGE("postGrabRawFrame: Drop the frame");
+	DQcount = nQueued - nDequeued;
+	if(DQcount == 0)
+	{
+		LOGE("postGrabRawFrame: Drop the frame");
 		ret = ioctl(camHandle, VIDIOC_QBUF, &videoIn->buf);
 		if (ret < 0) {
 			LOGE("postGrabRawFrame: VIDIOC_QBUF Failed");
 			return;
 		}
-    }
+	}
 
-    /* DQ */
-    ret = ioctl(camHandle, VIDIOC_DQBUF, &videoIn->buf);
-    if (ret < 0) {
-        LOGE("GrabRawFrame: VIDIOC_DQBUF Failed");
-        return;
-    }
-    nDequeued++;
+	/* DQ */
+	ret = ioctl(camHandle, VIDIOC_DQBUF, &videoIn->buf);
+	if (ret < 0) {
+		LOGE("GrabRawFrame: VIDIOC_DQBUF Failed");
+		return;
+	}
+	nDequeued++;
 
-    if(videoIn->format.fmt.pix.width != width || \
-    		videoIn->format.fmt.pix.height != height)
-    {
-    	//do resize
-    	//LOGE("Resizing required");
-    }
-    else
-    {
-    	memcpy(previewBuffer, videoIn->mem[videoIn->buf.index], (size_t) videoIn->buf.bytesused);
-    }
+	if(videoIn->format.fmt.pix.width != width || \
+			videoIn->format.fmt.pix.height != height)
+	{
+		//do resize
+		//LOGE("Resizing required");
+	}
+	else
+	{
+		memcpy(previewBuffer, videoIn->mem[videoIn->buf.index], (size_t) videoIn->buf.bytesused);
+	}
 
-    ret = ioctl(camHandle, VIDIOC_QBUF, &videoIn->buf);
-    if (ret < 0) {
-        LOGE("postGrabRawFrame: VIDIOC_QBUF Failed");
-        return;
-    }
+	ret = ioctl(camHandle, VIDIOC_QBUF, &videoIn->buf);
+	if (ret < 0) {
+		LOGE("postGrabRawFrame: VIDIOC_QBUF Failed");
+		return;
+	}
 
-    nQueued++;
+	nQueued++;
 }
 
-int 
-V4L2Camera::savePicture(unsigned char *inputBuffer, const char * filename)
-{
-    FILE *output;
-    int fileSize;
-    int ret;
-    output = fopen(filename, "wb");
-
-    if (output == NULL) {
-        LOGE("GrabJpegFrame: Ouput file == NULL %s", strerror(errno));
-        return 0;
-    }
-
-    //fileSize = saveYUYVtoJPEG(inputBuffer, videoIn->width, videoIn->height, output, 100);
-
-    fclose(output);
-    return fileSize;
-}
 
 void V4L2Camera::GrabJpegFrame (void *captureBuffer)
 {
-    FILE *output;
-    FILE *input;
-    int fileSize;
-    int ret;
-
-    LOG_FUNCTION_START
-    videoIn->buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-    videoIn->buf.memory = V4L2_MEMORY_MMAP;
-
-    do{
-       	LOGE("Dequeue buffer");
-		/* Dequeue buffer */
-		ret = ioctl(camHandle, VIDIOC_DQBUF, &videoIn->buf);
-		if (ret < 0) {
-			LOGE("GrabJpegFrame: VIDIOC_DQBUF Failed");
-			break;
-		}
-		nDequeued++;
-
-		LOGE("savePicture");
-		fileSize = savePicture((unsigned char *)videoIn->mem[videoIn->buf.index], "/sdcard/tmp.jpg");
-
-		LOGE("VIDIOC_QBUF");
-
-		/* Enqueue buffer */
-		ret = ioctl(camHandle, VIDIOC_QBUF, &videoIn->buf);
-		if (ret < 0) {
-			LOGE("GrabJpegFrame: VIDIOC_QBUF Failed");
-			break;
-		}
-		nQueued++;
-
-		LOGE("fopen temp file");
-		input = fopen("/sdcard/tmp.jpg", "rb");
-
-		if (input == NULL)
-			LOGE("GrabJpegFrame: Input file == NULL");
-		else {
-			fread((uint8_t *)captureBuffer, 1, fileSize, input);
-			fclose(input);
-		}
-		break;
-    }while(0);
-
-    LOG_FUNCTION_EXIT
-    return;
 }
-int V4L2Camera::CreateJpegFromBuffer(void *rawBuffer,void **captureBuffer)
+
+int V4L2Camera::CreateJpegFromBuffer(void *rawBuffer,void *captureBuffer)
 {
-    FILE *output;
-    FILE *input;
-    int fileSize;
-    int ret;
+	FILE *output;
+	FILE *input;
+	int fileSize;
+	unsigned char * jpeg_buf;
+	int ret;
 
-    LOG_FUNCTION_START
+	LOG_FUNCTION_START
 
-    do{
-     	LOGE("savePicture");
-		fileSize = saveYUYVtoJPEG((unsigned char *)rawBuffer, videoIn->width, videoIn->height, (unsigned char **)captureBuffer, 100);
+	do{
+		LOGD("savePicture: %d x %d ", videoIn->width, videoIn->height);
+		fileSize = saveYUYVtoJPEG((unsigned char *)rawBuffer, videoIn->width, videoIn->height, &jpeg_buf, 100);
+	}while(0);
 
-		LOGE("fopen temp file");
-
-    }while(0);
-
-    LOG_FUNCTION_EXIT
-    return fileSize;
+	memcpy(captureBuffer, jpeg_buf, fileSize);
+	free(jpeg_buf);
+	LOG_FUNCTION_EXIT
+	return fileSize;
 }
 
 int V4L2Camera::entity_dev_name (int id, char *name)
@@ -774,93 +648,6 @@ int V4L2Camera::entity_dev_name (int id, char *name)
 
 }
 
-/*
-int V4L2Camera::saveYUYVtoJPEG (unsigned char *inputBuffer, int width, int height, 
-	unsigned char **outputBuffer, int quality)
-{
-    struct jpeg_compress_struct cinfo;
-    struct jpeg_error_mgr jerr;
-    JSAMPROW row_pointer[1];
-    unsigned char *line_buffer, *yuyv;
-    int z;
-    struct jpeg_buffer_dest dst;
-
-    line_buffer = (unsigned char *) calloc (width * 3, 1);
-    yuyv = inputBuffer;
-
-    cinfo.err = jpeg_std_error (&jerr);
-    jpeg_create_compress (&cinfo);
-    jpeg_buffer_dest (&cinfo, &dst);
-
-    cinfo.image_width = width;
-    cinfo.image_height = height;
-    cinfo.input_components = 3;
-    cinfo.in_color_space = JCS_RGB;
-    //cinfo.in_color_space = JCS_YCbCr;
-
-    jpeg_set_defaults (&cinfo);
-    jpeg_set_quality (&cinfo, quality, TRUE);
-
-    jpeg_start_compress (&cinfo, TRUE);
-
-    z = 0;
-    while (cinfo.next_scanline < cinfo.image_height) {
-	    int x;
-	    unsigned char *ptr = line_buffer;
-
-	    for (x = 0; x < width; x++) {
-		    int r, g, b;
-		    int y, u, v;
-
-		    /*
-		    if (!z)
-			    y = yuyv[1] << 8;
-		    else
-			    y = yuyv[3] << 8;
-
-		    u = yuyv[0] - 128;
-		    v = yuyv[2] - 128;
-		    /* Kernel version diff */
-		    /*
-
-		    if (!z)
-			    y = yuyv[0] << 8;
-		    else
-			    y = yuyv[2] << 8;
-
-		    u = yuyv[1] - 128;
-		    v = yuyv[3] - 128;
-
-		    r = (y + (359 * v)) >> 8;
-		    g = (y - (88 * u) - (183 * v)) >> 8;
-		    b = (y + (454 * u)) >> 8;
-
-		    *(ptr++) = (r > 255) ? 255 : ((r < 0) ? 0 : r);
-		    *(ptr++) = (g > 255) ? 255 : ((g < 0) ? 0 : g);
-		    *(ptr++) = (b > 255) ? 255 : ((b < 0) ? 0 : b);
-
-		    if (z++) {
-			    z = 0;
-			    yuyv += 4;
-		    }
-	    }
-
-        row_pointer[0] = line_buffer;
-        jpeg_write_scanlines (&cinfo, row_pointer, 1);
-    }
-
-    jpeg_finish_compress (&cinfo);
-	LOGD("JPEG Buffer Size: %d", dst.used);
-	LOGD("First bytes %x %x %x %x", dst.buf[0], dst.buf[1], dst.buf[2], dst.buf[3]);
-	//memcpy(outputBuffer, (unsigned char*)dst.buf, dst.sz);
-	*outputBuffer = dst.buf;
-    jpeg_destroy_compress (&cinfo);
-    free (line_buffer);
-
-    return dst.used;
-}
-*/
-
 int V4L2Camera::saveYUYVtoJPEG (unsigned char *inputBuffer, int width, int height, 
 	unsigned char **outputBuffer, int quality)
 {
@@ -872,7 +659,6 @@ int V4L2Camera::saveYUYVtoJPEG (unsigned char *inputBuffer, int width, int heigh
 
 	comp.err = jpeg_std_error(&error);
 	jpeg_create_compress(&comp);
-	/*jpeg_stdio_dest(&comp, out);*/
 	jpeg_buffer_dest (&comp, &dst);
 	comp.image_width = width;
 	comp.image_height = height;
@@ -939,53 +725,9 @@ int V4L2Camera::saveYUYVtoJPEG (unsigned char *inputBuffer, int width, int heigh
 }
 
 
-static inline void yuv_to_rgb16(unsigned char y,
-                                unsigned char u,
-                                unsigned char v,
-                                unsigned char *rgb)
-{
-    register int r,g,b;
-    int rgb16;
-
-    r = (1192 * (y - 16) + 1634 * (v - 128) ) >> 10;
-    g = (1192 * (y - 16) - 833 * (v - 128) - 400 * (u -128) ) >> 10;
-    b = (1192 * (y - 16) + 2066 * (u - 128) ) >> 10;
-
-    r = r > 255 ? 255 : r < 0 ? 0 : r;
-    g = g > 255 ? 255 : g < 0 ? 0 : g;
-    b = b > 255 ? 255 : b < 0 ? 0 : b;
-
-    rgb16 = (int)(((r >> 3)<<11) | ((g >> 2) << 5)| ((b >> 3) << 0));
-
-    *rgb = (unsigned char)(rgb16 & 0xFF);
-    rgb++;
-    *rgb = (unsigned char)((rgb16 & 0xFF00) >> 8);
-
-}
-
 void V4L2Camera::convert(unsigned char *buf, unsigned char *rgb, int width, int height)
 {
-    int x,y,z=0;
-    int blocks;
 
-    blocks = (width * height) * 2;
-
-    for (y = 0; y < blocks; y+=4) {
-        unsigned char Y1, Y2, U, V;
-	/*
-	Y1 = buf[y + 1];
-	V = buf[y + 2];
-	Y2 = buf[y + 3];
-	/* Kernel version diff */
-	Y1 = buf[y + 0];
-	U = buf[y + 1];
-	Y2 = buf[y + 2];
-	V = buf[y + 3];
-
-
-        yuv_to_rgb16(Y1, U, V, &rgb[y]);
-        yuv_to_rgb16(Y2, U, V, &rgb[y + 2]);
-    }
 }
 
 

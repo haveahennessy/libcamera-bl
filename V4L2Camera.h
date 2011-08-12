@@ -44,20 +44,18 @@
 namespace android {
 
 struct vdIn {
-    struct v4l2_capability cap;
-    struct v4l2_format format;
-    struct v4l2_buffer buf;
-    struct v4l2_requestbuffers rb;
-    void *mem[NB_BUFFER];
-    bool isStreaming;
-    int width;
-    int height;
-    int formatIn;
-    int framesizeIn;
-#ifdef _OMAP_RESIZER_
-	int resizeHandle;
-#endif //_OMAP_RESIZER_
+	struct v4l2_capability cap;
+	struct v4l2_format format;
+	struct v4l2_buffer buf;
+	struct v4l2_requestbuffers rb;
+	void *mem[NB_BUFFER];
+	bool isStreaming;
+	int width;
+	int height;
+	int formatIn;
+	int framesizeIn;
 };
+
 struct mdIn {
 	int media_fd;
 	int input_source;
@@ -65,50 +63,47 @@ struct mdIn {
 	int video;
 	int ccdc;
 	int resizer;
-	int tvp5146;
-	int mt9t111;
-	int mt9v113;
 	int bugcam;
 	int num_entities;
 };
 
 class V4L2Camera {
 
-public:
-    V4L2Camera();
-    ~V4L2Camera();
+	public:
+		V4L2Camera();
+		~V4L2Camera();
 
-    int Open (const char *device);
-    int Configure(int width,int height,int pixelformat,int fps);
-    void Close ();
-    void reset_links(const char *device);
-    int Open_media_device(const char *device);
+		int Open (const char *device);
+		int Configure(int width,int height,int pixelformat,int fps);
+		void Close ();
+		void reset_links(const char *device);
+		int Open_media_device(const char *device);
 
-    int BufferMap ();
-    int init_parm();
-    void Uninit ();
+		int BufferMap ();
+		int init_parm();
+		void Uninit ();
 
-    int StartStreaming ();
-    int StopStreaming ();
+		int StartStreaming ();
+		int StopStreaming ();
 
-    void GrabPreviewFrame (void *previewBuffer);
-    void GrabRawFrame(void *previewBuffer,unsigned int width, unsigned int height);
-    void GrabJpegFrame (void *captureBuffer);
-    int CreateJpegFromBuffer(void *rawBuffer,void **captureBuffer);
-    int savePicture(unsigned char *inputBuffer, const char * filename);
-    void convert(unsigned char *buf, unsigned char *rgb, int width, int height);
+		void GrabPreviewFrame (void *previewBuffer);
+		void GrabRawFrame(void *previewBuffer,unsigned int width, unsigned int height);
+		void GrabJpegFrame (void *captureBuffer);
+		int CreateJpegFromBuffer(void *rawBuffer,void *captureBuffer);
+		int savePicture(unsigned char *inputBuffer, const char * filename);
+		void convert(unsigned char *buf, unsigned char *rgb, int width, int height);
 
-private:
-    struct vdIn *videoIn;
-    struct mdIn *mediaIn;
-    int camHandle;
+	private:
+		struct vdIn *videoIn;
+		struct mdIn *mediaIn;
+		int camHandle;
 
-    int nQueued;
-    int nDequeued;
+		int nQueued;
+		int nDequeued;
 
-    int entity_dev_name(int id, char *name);
-    int saveYUYVtoJPEG (unsigned char *inputBuffer, int width, int height, 
-    			unsigned char **outputBuffer, int quality);
+		int entity_dev_name(int id, char *name);
+		int saveYUYVtoJPEG (unsigned char *inputBuffer, int width, int height, 
+				unsigned char **outputBuffer, int quality);
 };
 
 }; // namespace android
