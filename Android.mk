@@ -9,6 +9,7 @@ include $(CLEAR_VARS)
 LOCAL_SRC_FILES:= \
     CameraHardware.cpp \
     V4L2Camera.cpp \
+    jpeg-dest.cpp \
     media.c \
     converter.cpp
 
