@@ -272,13 +272,46 @@ static void __yuv2rgb(int y, int cb, int cr, int *r, int *g, int *b) {
   if(*b < 0) *b = 0;
 }
 
-void yuyv422_to_rgba(unsigned char *bufsrc, unsigned char *bufdest, int width, int height, unsigned char alpha)
+static inline void yuv_to_rgb16(unsigned char y,
+                                unsigned char u,
+                                unsigned char v,
+                                unsigned char *rgb)
+{
+    register int r,g,b;
+    int rgb16;
+
+
+    r = (1192 * (y - 16) + 1634 * (v - 128) ) >> 10;
+    g = (1192 * (y - 16) - 833 * (v - 128) - 400 * (u -128) ) >> 10;
+    b = (1192 * (y - 16) + 2066 * (u - 128) ) >> 10;
+
+/*
+    r = y + ((359 * v) >> 8);
+    g = y - ((88 * u + 183 * v) >> 8);
+    b = y + ((454 * u) >> 8);
+*/
+    r = r > 255 ? 255 : r < 0 ? 0 : r;
+    g = g > 255 ? 255 : g < 0 ? 0 : g;
+    b = b > 255 ? 255 : b < 0 ? 0 : b;
+
+    rgb16 = (int)(((r >> 3) << 11) | ((g >> 2) << 5)| ((b >> 3) << 0));
+
+    *rgb = (unsigned char)(rgb16 & 0xFF);
+    rgb++;
+    *rgb = (unsigned char)((rgb16 & 0xFF00) >> 8);
+
+}
+
+void yuyv422_to_rgb(unsigned char *bufsrc, unsigned char *bufdest, int width, int height)
 {
 	int row, col;
 	int y0, y1, cr, cb;
 	int r, g, b;
 	int w;
 
+	unsigned short *outbuf = (unsigned short*)bufdest;
+
+/*
 	w = width * 2;
 	for(row=0; row < height; row+=2) {
 		for(col=0; col < width; col+=2) {
@@ -294,24 +327,21 @@ void yuyv422_to_rgba(unsigned char *bufsrc, unsigned char *bufdest, int width, i
 		//LOGD("row=%d ibuf=0x%x out=0x%x", row, bufsrc, bufdest);
 	}
 
-/*
+*/
 	for(row=0; row < height; row++) {
 		for(col=0; col < width; col+=2) {
 			y0 = ((int) *bufsrc++);
-			cb = ((int) *bufsrc++) - 128;
+			cb = ((int) *bufsrc++);
 			y1 = ((int) *bufsrc++);
-			cr = ((int) *bufsrc++) - 128;
-			__yuv2rgb(y0, cb, cr, &r, &g, &b);
-			*bufdest++ = r;
-			*bufdest++ = g;
-			*bufdest++ = b;
-			__yuv2rgb(y1, cb, cr, &r, &g, &b);
-			*bufdest++ = r;
-			*bufdest++ = g;
-			*bufdest++ = b;
+			cr = ((int) *bufsrc++);
+			yuv_to_rgb16(y0, cb, cr, bufdest);
+			bufdest+=2;
+			yuv_to_rgb16(y0, cb, cr, bufdest);
+			bufdest+=2;
+
 		}
 	}
-*/
+
 
 }
 
